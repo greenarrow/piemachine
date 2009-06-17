@@ -1,0 +1,34 @@
+import unittest
+import piemachine
+
+class Machine(unittest.TestCase):
+
+	
+	#def setUp(self):
+	#	print "ss"
+	
+	#def tearDown(self):
+	#	print "td"
+	
+	def test_create(self):
+		"""create machine object"""
+		print "tc"
+		class MachineTest(piemachine.Machine):
+			
+			output = piemachine.outputs.serial_snap
+			
+		machine_test = MachineTest()
+		
+		self.assert_( issubclass(machine_test.__class__, piemachine.Machine) )
+
+
+def suite():
+	return unittest.TestLoader().loadTestsFromTestCase(Machine)
+
+"""
+def suite():
+	suite = unittest.TestSuite()
+	suite.addTest( TestMachine() )
+	#print suite.countTestCases()
+	return suite
+"""

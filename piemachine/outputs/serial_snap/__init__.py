@@ -1,0 +1,214 @@
+
+__title__ = "serial snap"
+
+
+
+# cartesian? or try (preferably) to do it all in common code?
+
+class Machine:
+	
+	config_optional = []
+	config_required = ['serial_port']
+	
+	def __init__(self, parent, *args, **kwargs):
+		self.parent = parent
+	
+	def configure(self, *args, **kwargs):	
+		if 'serial_port' in kwargs:
+			self.serial_port = kwargs['serial_port']
+			print "%s machine has port %s" % (__title__, self.serial_port)
+			return True
+		else:
+			return False
+
+"""
+
+
+
+
+	
+"""
+
+class Axis:
+	
+	def __init__(self, parent, *args, **kwargs):
+		self.parent = parent
+	
+	def configure(self, *args, **kwargs):	
+		if 'address' in kwargs:
+			self.address = kwargs['address']
+			print "%s axis has address %d" % (__title__, self.address)
+			return True
+		else:
+			return False
+	
+	#def seek(self, 
+	
+	
+	
+	def snap_forward1(self):
+		"""Move axis one step forward
+		Return the completed state as a bool."""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_FORWARD1] ) 
+		p.send()
+	
+	def snap_backward1(self):
+		"""Move axis one step backward"""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_BACKWARD1] ) 
+		p.send()
+	
+	def snap_forward(self, speed = None):
+		"""Spin axis forward at given speed (0-255)
+		If no speed is specified then a value must have been previously set with axisClass.setSpeed()"""
+		if speed == None:
+			speed = self.speed
+			if speed == None:
+				raise _RepRapError("Axis speed not set")
+		if speed >=0 and speed <= 0xFF:
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_FORWARD, int(speed)] ) 
+			p.send()
+		else:
+			raise _RepRapError("Invalid speed value")
+	
+	def snap_backward(self, speed = None):
+		"""Spin axis backward at given speed (0-255)
+		If no speed is specified then a value must have been previously set with axisClass.setSpeed()"""
+		# If speed is not specified use stored (or default)
+		if speed == None:
+			speed = self.speed
+			if speed == None:
+				raise _RepRapError("Axis speed not set")
+		if speed >=0 and speed <= 0xFF:
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_REVERSE, int(speed)] ) 
+			p.send()
+		else:
+			raise _RepRapError("Invalid speed value")
+	
+	def snap_getsensors(self):
+		"""Debug only. Returns raw PIC port bytes)"""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_GETSENSOR] )
+		p.send()
+		rep = p.getReply()
+		rep.checkReply(3, CMD_GETSENSOR)
+		data = rep.dataBytes
+		print data[1], data[2]
+	
+	def snap_getpos(self):
+		"""Return the axis postition as an integer (steps)."""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_GETPOS] )
+		p.send()
+		rep = p.getReply()
+		rep.checkReply(3, CMD_GETPOS)
+		data = rep.dataBytes
+		pos = _bytes2int( data[1], data[2] )
+		return pos
+	
+	def snap_setpos(self, pos):
+		"""set current position (integer) (set variable, not physical position. units as steps)"""
+		if pos >=0 and pos <= 0xFFFF:
+			posMSB ,posLSB = _int2bytes( pos )
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_SETPOS, posMSB, posLSB] )
+			p.send()
+		else:
+			raise _RepRapError("Invalid position value")
+	
+	def snap_free(self):
+		"""Power off coils on stepper"""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_FREE] ) 
+		p.send()
+	
+	def snap_seek(self, pos, speed = None, waitArrival = True, units = None):
+		"""Seek to axis location pos. If waitArrival is True, funtion waits until seek is compete to return"""
+		
+		# If no speed is specified use value set for axis, if this doesn't exist raise exception
+		if speed == None:
+			speed = self.speed
+			if speed == None:
+				raise _RepRapError("Axis speed not set")
+		
+		# If no units area specified use units set for axis, if this doesn't exist use steps
+		if units == None:
+			units = self.units
+			if units == None:
+				units = UNITS_STEPS
+		
+		# Convert units into steps
+		if units == UNITS_STEPS:
+			pass
+		elif units == UNITS_MM:
+			newX = int( float(newX) * self.stepsPerMM )
+			newY = int( float(newY) * self.stepsPerMM )
+		elif units == UNITS_INCHES:
+			newX = int( float(newX) * self.stepsPerMM * 25.4 )
+			newX = int( float(newY) * self.stepsPerMM * 25.4 )
+		else:
+			raise _RepRapError("Invalid units")
+		
+		# Check that position is withing limits and speed is valid
+		if (pos <= self.limit or self.limit == 0) and pos >=0 and pos <= 0xFFFF and speed >=0 and speed <= 0xFF:
+			posMSB ,posLSB = _int2bytes( pos )
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_SEEK, int(speed), posMSB ,posLSB] ) 
+			p.send()
+			if waitArrival:
+				notif = p.getReply()
+				if not notif.dataBytes[0] == CMD_SEEK:
+					raise _RepRapError("Expected seek notification")
+		else:
+			raise _RepRapError("Invalid speed or position value")
+	
+	def snap_homereset(self, speed = None, waitArrival = True):
+		"""Go to 0 position. If waitArrival is True, funtion waits until reset is compete to return"""
+		if speed == None:
+			speed = self.speed
+			if speed == None:
+				raise _RepRapError("Axis speed not set")
+		if speed >= 0 and speed <= 0xFF:
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_HOMERESET, int(speed)] ) 
+			p.send()
+			if waitArrival:
+				notif = p.getReply()
+				if not notif.dataBytes[0] == CMD_HOMERESET:
+					raise _RepRapError("Expected home reset notification")
+		else:
+			raise _RepRapError("Invalid speed value")
+	
+	def snap_setnotify(self):
+		"""Set axis to notify on arrivals"""
+		p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_NOTIFY, snap.localAddress] ) 	# set notifications to be sent to host
+		p.send()
+	
+	def snap_setsync( self, syncMode ):
+		"""Set sync mode"""
+		if syncMode >= 0 and syncMode <= 0xFF:
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_SYNC, int(syncMode)] )
+			p.send()
+		else:
+			raise _RepRapError("Invalid sync mode")
+	
+	def snap_dda( self, seekTo, slaveDelta, speed = False, waitArrival = True):
+		"""Set DDA mode"""
+		if not speed:
+			speed = self.speed
+		if (seekTo <= self.limit or self.limit == 0) and seekTo >=0 and seekTo <= 0xFFFF and slaveDelta >=0 and slaveDelta <= 0xFFFF and speed >=0 and speed <= 0xFF:
+			masterPosMSB, masterPosLSB = _int2bytes( seekTo )
+			slaveDeltaMSB, slaveDeltaLSB = _int2bytes( slaveDelta )
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_DDA, int(speed), masterPosMSB ,masterPosLSB, slaveDeltaMSB, slaveDeltaLSB] ) 	#start sync
+			p.send()
+			if waitArrival:
+				notif = p.getReply()
+				if not notif.dataBytes[0] == CMD_DDA:
+					raise _RepRapError("Expected DDA notification")
+	
+	def snap_setpower( self, power ):
+		"""Set stepper motor power (0-100%)"""
+		power = int( float(power) * 0.63 )
+		if power >=0 and power <=0x3F:
+			#p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_SETPOWER, int( power * 0.63 )] ) # This is a value from 0 to 63 (6 bits)
+			p = snap.Packet( self.address, snap.localAddress, 0, 1, [CMD_SETPOWER, power] ) # This is a value from 0 to 63 (6 bits)
+			p.send()
+		else:
+			raise _RepRapError("Invalid power value")
+
+
+
+

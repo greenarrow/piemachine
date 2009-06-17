@@ -1,0 +1,13 @@
+
+class Tool():
+	
+	def __init__(self, parent):
+		self.parent = parent
+	
+	def configure_output(self, *args, **kwargs):
+		#self.output_object = self.output.Machine()
+		#self.output_configured = self.output_object.configure(*args, **kwargs)
+		pass
+	
+
+
